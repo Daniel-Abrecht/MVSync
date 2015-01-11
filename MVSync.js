@@ -1,11 +1,12 @@
-"use strict";
-
 (function(){
+"use strict";
 
 window['model'] = window['model'] || {};
 
 /** @type {function(Object,function(Object))} */
 Object.observe;
+/** @type {function(Object,function(Object))} */
+Object.unobserve;
 
 var templates = {};
 var requiredTemplates = {};
@@ -129,15 +130,7 @@ function Template(template){
               }
             } break;
             case "map": {
-              switch(modelAction){
-                case "add":
-                case "update": {
-                  b.update();
-                } break;
-                case "delete": {
-                  b.clear();
-                } break;
-              }
+              b.update();
             } break;
           }
         })();}
@@ -154,6 +147,8 @@ function Template(template){
           e.templateInstance._cleanup();
         el.removeChild(e);
       }
+      if("_content" in el)
+        delete el._content;
     }
     this._cleanup = function(){
       Object.unobserve(this.observer.obj,this.observer.func);
@@ -173,7 +168,7 @@ function Template(template){
     function setContent(element,value){
       clearContent(element);
       if(value instanceof Node){
-        var node = value.cloneNode();
+        var node = value.cloneNode(true);
         setup(node);
         element.appendChild(node);
       }else{
@@ -286,28 +281,25 @@ function Template(template){
             return;
           }
           var target = scope[name];
+          if(target)
+            target = Object((new Function("v","return v"+expr+";"))(target));
           if(!target)
-            return;
-          target = Object((new Function("v","return v"+expr+";"))(target));
-          if(!target)
-            return;
-          clearContent(e);
-          if("length" in target){
-            e.content = [];
-            Object.observe(target,function(changes){
-              syncLists(e.content,target,e,templates[v[1]]);
-            });
-            syncLists(e.content,target,e,templates[v[1]]);
-          }else{
-            var instance = templates[v[1]].instance(target);
-            sc.containingTemplateInstances.push(instance.templateInstance);
-            e.appendChild(instance);
-          }
+            target=[];
+//          clearContent(e);
+          if(!("length" in target))
+            target=[target];
+          e._content = e._content || {
+            subScopes: [],
+            subScopeInfos: []
+          };
+          Object.observe(target,function(changes){
+            syncLists(e._content,target,e,templates[v[1]]);
+          });
+          syncLists(e._content,target,e,templates[v[1]]);
         };
         ( mapping[v[0]] = mapping[v[0]] || [] ).push({
           "type": "map",
-          "update": setup_mapping,
-          "clear": clearContent.bind(null,e)
+          "update": setup_mapping
         });
         setup_mapping();
       }
@@ -317,17 +309,57 @@ function Template(template){
           setup(e.children[i]);
     }
 
-    function syncLists(a,b,e,t){
-      for(var i=a.length;i--;)
-        if(b.indexOf(a[i])==-1){
-          a.splice(i,1);
-          e.removeChild(e.children[i]);
-        }
-      for(var i=0;i<b.length;i++)
-        if(a.indexOf(b[i])==-1){
+    function syncLists(contentDatas,b,e,t){
+      var a = contentDatas.subScopes;
+      var d = contentDatas.subScopeInfos;
+      for(var i=a.length;i--;){ // remove elements / objects
+        if(b.indexOf(a[i])!=-1)
+          continue;
+        if(d[i].element.parentNode)
+          d[i].element.parentNode.removeChild(d[i].element);
+        a.splice(i,1);
+        d.splice(i,1);
+      }
+      for(var i=0;i<b.length;i++){ // add elements / objects
+        var j = a.indexOf(b[i]);
+        if(j!=-1){
+          d[j].index = i;
+        }else{
+          var newInfo = {
+            element: t.instance(b[i]),
+            index: i
+          };
+          if(!d.length){
+            e.appendChild(newInfo.element);
+          }else{
+            var last = d[d.length-1].element;
+            if(last.parentNode==e){
+              e.insertBefore(newInfo.element,last.nextSibling);
+            }else{
+              e.appendChild(newInfo.element);
+            }
+          }
           a.push(b[i]);
-          e.appendChild(t.instance(b[i]));
+          d.push(newInfo);
         }
+      }
+      for(var i=0;i<d.length;i++){ // move elements / objects to desired index
+        var x = d[i];
+        if(x.index==i)
+          continue;
+        var ae = x.element;
+        var be = d[x.index].element;
+        arraySwapValues(d,i,x.index);
+        arraySwapValues(a,i,x.index);
+        var ap = ae.parentNode;
+        var bp = be.parentNode;
+        if(ap&&bp){
+          var an = ae.nextSibling;
+          var bn = be.nextSibling;
+          bp.insertBefore(ae,bn);
+          ap.insertBefore(be,an);
+        }
+      }
     }
 
     setup(this.root);
@@ -354,12 +386,16 @@ function Template(template){
   };
 }
 
+function arraySwapValues(a,i,j){
+  a[i]=[a[j],a[j]=a[i]][0];
+}
+
 function compileTemplate(e){
   var name = e.getAttribute("data-template");
   if(e==document.body)
     name = "body";
-  if(e.parentElement)
-    e.parentElement.removeChild(e);
+  if(e.parentNode)
+    e.parentNode.removeChild(e);
   e.templateName = name;
   var t = templates[name] = new Template(e);
   if(name in requiredTemplates){
