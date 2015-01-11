@@ -392,8 +392,8 @@ function arraySwapValues(a,i,j){
 
 function compileTemplate(e){
   var name = e.getAttribute("data-template");
-  if(e==document.body)
-    name = "body";
+  if(e==document.documentElement)
+    name = "root";
   if(e.parentNode)
     e.parentNode.removeChild(e);
   e.templateName = name;
@@ -441,8 +441,8 @@ addEventListener("load",function(){
     base = document.querySelector("[data-template-root]").getAttribute("data-template-root") + "/";
   }
   compileTemplates(document);
-  var t = compileTemplate(document.body);
-  document.documentElement.appendChild(document.body=t.instance(model));
+  var t = compileTemplate(document.documentElement);
+  document.appendChild(t.instance(model));
 });
 
 })();
