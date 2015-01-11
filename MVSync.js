@@ -42,12 +42,18 @@ function Template(template){
     function add(name){
       change(name);
     }
+    function evaluateExpression(expr){
+      try {
+        return (new Function("v","return v."+expr+";"))(scope);
+      } catch(e) {
+        return null;
+      }
+    }
     function change(name){
       if(name in mapping)
         for(var i in mapping[name]){(function(){
           var b = mapping[name][i];
-          var something = scope[name]||'';
-          something = (new Function("v","return v"+b.expr+";"))(something);
+          var something = evaluateExpression(b.expr);
           var value = null;
           switch(b.type){
             case "getter": {
@@ -112,13 +118,9 @@ function Template(template){
                 }
               }
               if(b.what=="attribute"){
-                if(b.which in b.element)
-                  b.element[b.which] = value;
-                else
-                  b.element.setAttribute(b.which,value);
+                setAttr(b.element,b.which,value);
               }else if(b.what=="content"){
-                b.element.innerHTML='';
-                b.element.appendChild(document.createTextNode(value));
+                setContent(b.element,value);
               }
             } break;
           }
@@ -131,17 +133,35 @@ function Template(template){
     this.root = template.cloneNode(true);
     this.root.classList.add(attrName);
 
+    function setAttr(element,name,value){
+      if(name in element)
+        element[name] = value;
+      else
+        element.setAttribute(name,value);
+    }
+
+    function setContent(element,value){
+      element.innerHTML='';
+      if(value instanceof Node){
+        var node = value.cloneNode();
+        setup(node);
+        element.appendChild(node);
+      }else{
+        element.appendChild(document.createTextNode(value||''));
+      }
+    }
+
     function setup(e){
       var bind = e.getAttribute("data-bind");
       if(bind){
-        bind = bind.split("|");
+        bind = bind.split("¦");
         for(var i=0;i<bind.length;i++){
           var b = bind[i].split(":");
           var expr = b[1];
-          expr = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/);
-          var name = expr[1];
-          expr = expr[2];
+          var name = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/)[1];
           var attr = b[0];
+          var value = evaluateExpression(expr);
+          setAttr(e,attr,value);
           mapping[name] = mapping[name] || [];
           mapping[name].push({
             which: attr,
@@ -156,10 +176,11 @@ function Template(template){
       if(content){
         var expr = content.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/);
         var name = expr[1];
-        expr = expr[2];
+        expr = content;
+        var value = evaluateExpression(expr);
+        setContent(e,value);
         mapping[name] = mapping[name] || [];
         mapping[name].push({
-          which: "$$content",
           what: "content",
           type: "value",
           expr: expr,
@@ -168,13 +189,11 @@ function Template(template){
       }
       var getter = e.getAttribute("data-getter");
       if(getter){
-        getter = getter.split("|");
+        getter = getter.split("¦");
         for(var i=0;i<getter.length;i++){
           var g = getter[i].split(":");
           var expr = g[1];
-          expr = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/);
-          var name = expr[1];
-          expr = expr[2];
+          var name = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/)[1];
           var attr = g[0];
           mapping[name] = mapping[name] || [];
           mapping[name].push({
@@ -187,13 +206,11 @@ function Template(template){
       }
       var setter = e.getAttribute("data-setter");
       if(setter){
-        setter = setter.split("|");
+        setter = setter.split("¦");
         for(var i=0;i<setter.length;i++){
           var s = setter[i].split(":");
           var expr = s[1];
-          expr = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/);
-          var name = expr[1];
-          expr = expr[2];
+          var name = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/)[1];
           var attr = s[0];
           mapping[name] = mapping[name] || [];
           mapping[name].push({
@@ -212,7 +229,7 @@ function Template(template){
             var map = maps[i];
             if(map.type!="value"||map.which!=attr)
               continue;
-            (new Function("s","n","v","if(s[n]"+map.expr+".toString()!=v)s[n]"+map.expr+"=Object(s[n]"+map.expr+").constructor(v);")).call(scope,scope,name,value);
+            (new Function("s","v","if(s."+map.expr+".toString()!=v)s."+map.expr+"=Object(s."+map.expr+").constructor(v);")).call(scope,scope,value);
           }
         }
       };
