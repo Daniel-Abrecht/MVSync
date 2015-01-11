@@ -28,20 +28,23 @@ function Template(template){
    * @constructor
    */
   function Instance(scope){
+    var sc = this;
+
     Object.defineProperty(scope,"this",{
       configurable: true,
       writable: true,
       enumerable: false,
       value: scope
     });
+
     var mapping = {};
     var getterCache = {};
     var getterCacheByProperty = {};
     var setterCache = {};
     var setterCacheByProperty = {};
-    function add(name){
-      change(name);
-    }
+
+    this.containingTemplateInstances = [];
+
     function evaluateExpression(expr){
       try {
         return (new Function("v","return v."+expr+";"))(scope);
@@ -49,11 +52,13 @@ function Template(template){
         return null;
       }
     }
-    function change(name){
+    function update(name,modelAction){
       if(name in mapping)
         for(var i in mapping[name]){(function(){
           var b = mapping[name][i];
-          var something = evaluateExpression(b.expr);
+          var something = null;
+          if(b.expr)
+            something = evaluateExpression(b.expr);
           var value = null;
           switch(b.type){
             case "getter": {
@@ -123,15 +128,40 @@ function Template(template){
                 setContent(b.element,value);
               }
             } break;
+            case "map": {
+              switch(modelAction){
+                case "add":
+                case "update": {
+                  b.update();
+                } break;
+                case "delete": {
+                  b.clear();
+                } break;
+              }
+            } break;
           }
         })();}
     }
-    function remove(name){
-      change(name);
-    }
 
     this.root = template.cloneNode(true);
+    this.root.templateInstance = this;
     this.root.classList.add(attrName);
+
+    function clearContent(el){
+      while(el.childNodes.length){
+        var e = el.childNodes[el.childNodes.length-1];
+        if(e.templateInstance)
+          e.templateInstance._cleanup();
+        el.removeChild(e);
+      }
+    }
+    this._cleanup = function(){
+      Object.unobserve(this.observer.obj,this.observer.func);
+      for(var i=0;i<this.containingTemplateInstances.length;i++){
+        var templateInstance = this.containingTemplateInstances[i];
+        templateInstance._cleanup();
+      }
+    }
 
     function setAttr(element,name,value){
       if(name in element)
@@ -141,7 +171,7 @@ function Template(template){
     }
 
     function setContent(element,value){
-      element.innerHTML='';
+      clearContent(element);
       if(value instanceof Node){
         var node = value.cloneNode();
         setup(node);
@@ -261,7 +291,7 @@ function Template(template){
           target = Object((new Function("v","return v"+expr+";"))(target));
           if(!target)
             return;
-          e.innerHTML = '';
+          clearContent(e);
           if("length" in target){
             e.content = [];
             Object.observe(target,function(changes){
@@ -269,18 +299,15 @@ function Template(template){
             });
             syncLists(e.content,target,e,templates[v[1]]);
           }else{
-            e.appendChild(templates[v[1]].instance(target));
+            var instance = templates[v[1]].instance(target);
+            sc.containingTemplateInstances.push(instance.templateInstance);
+            e.appendChild(instance);
           }
         };
-        Object.observe(scope,function(changes){
-          changes.forEach(function(ch){
-            if(ch.name!=v[0])
-              return;
-            if(ch.type=="add"||ch.type=="update")
-              setup_mapping();
-            if(ch.type=="delete")
-              e.innerHTML='';
-          });
+        ( mapping[v[0]] = mapping[v[0]] || [] ).push({
+          "type": "map",
+          "update": setup_mapping,
+          "clear": clearContent.bind(null,e)
         });
         setup_mapping();
       }
@@ -305,19 +332,19 @@ function Template(template){
 
     setup(this.root);
 
-    Object.observe(scope,function(changes){
+    var observerFunc = function(changes){
       changes.forEach(function(ch){
-        if(ch.type=="add")
-          add(ch.name);
-        if(ch.type=="update")
-          change(ch.name);
-        if(ch.type=="delete")
-          remove(ch.name);
+        update(ch.name,ch.type);
       });
-    });
+    }
+    var observerObj = Object.observe(scope,observerFunc);
+    sc.observer = {
+      obj: observerObj,
+      func: observerFunc
+    };
 
     for(var i in scope){
-      add(i);
+      update(i,"add");
     }
 
   };
