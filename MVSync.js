@@ -136,7 +136,7 @@ function Template(template){
         })();}
     }
 
-    this.root = template.cloneNode(true);
+    this.root = (template instanceof HTMLHtmlElement)?template:template.cloneNode(true);
     this.root.templateInstance = this;
     this.root.classList.add(attrName);
 
@@ -392,9 +392,9 @@ function arraySwapValues(a,i,j){
 
 function compileTemplate(e){
   var name = e.getAttribute("data-template");
-  if(e==document.documentElement)
+  if(!name&&e instanceof HTMLHtmlElement)
     name = "root";
-  if(e.parentNode)
+  if(e.parentNode&&!(e instanceof HTMLHtmlElement))
     e.parentNode.removeChild(e);
   e.templateName = name;
   var t = templates[name] = new Template(e);
@@ -442,7 +442,7 @@ addEventListener("load",function(){
   }
   compileTemplates(document);
   var t = compileTemplate(document.documentElement);
-  document.appendChild(t.instance(model));
+  t.instance(model);
 });
 
 })();
