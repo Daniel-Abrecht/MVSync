@@ -11,12 +11,14 @@ Object.unobserve;
 var templates = {};
 var requiredTemplates = {};
 
-Object.observe(requiredTemplates,function(changes){
-  changes.forEach(function(ch){
-    if(ch.type=="add")
-      loadTemplate(ch.name);
+function init(){
+  Object.observe(requiredTemplates,function(changes){
+    changes.forEach(function(ch){
+      if(ch.type=="add")
+        loadTemplate(ch.name);
+    });
   });
-});
+}
 
 /**
  * @constructor
@@ -440,6 +442,7 @@ addEventListener("load",function(){
   }else if(document.querySelector("[data-template-root]")){
     base = document.querySelector("[data-template-root]").getAttribute("data-template-root") + "/";
   }
+  init();
   compileTemplates(document);
   var t = compileTemplate(document.documentElement);
   t.instance(model);
