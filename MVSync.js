@@ -311,7 +311,15 @@ function Template(template){
           setup(e.children[i]);
     }
 
-    function syncLists(contentDatas,b,e,t){
+    function syncLists(contentDatas,orig,e,t){
+      var b = [];
+      for(var i=0;i<orig.length;i++){
+        if(!(orig[i] instanceof Object))
+          continue;
+        if(b.indexOf(orig[i])!=-1)
+          continue;
+        b.push(orig[i]);
+      }
       var a = contentDatas.subScopes;
       var d = contentDatas.subScopeInfos;
       for(var i=a.length;i--;){ // remove elements / objects
