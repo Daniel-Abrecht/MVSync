@@ -249,7 +249,7 @@ function Template(template){
         }
       }
       var updateScope = function(attr){
-        var value = e.getAttribute(attr);
+        var value = e[attr] || e.getAttribute(attr);
         for(var name in mapping){
           var maps = mapping[name];
           for(var i in maps){
@@ -260,12 +260,17 @@ function Template(template){
           }
         }
       };
-      var observer = new MutationObserver(function(mutations){
-        mutations.forEach(function(mutation){;
-          updateScope(mutation.attributeName);
+      if("MutationObserver" in window){
+        var observer = new MutationObserver(function(mutations){
+          mutations.forEach(function(mutation){;
+            updateScope(mutation.attributeName);
+          });
         });
-      });
-      observer.observe( e, /** @type {!MutationObserverInit} */ ({ attributes: true }) );
+        observer.observe( e, /** @type {!MutationObserverInit} */ ({ attributes: true }) );
+      }else if("value" in e){
+        e.addEventListener("change",updateScope.bind(null,"value"),false);
+        e.addEventListener("input",updateScope.bind(null,"value"),false);
+      }
       if("value" in e)
         e.addEventListener("change",function(){
           e.setAttribute("value",e.value);
@@ -444,7 +449,19 @@ function loadTemplate(name){
   xhr.send();
 }
 
-addEventListener("load",function(){
+var initialized = false;
+
+function initMVSync(ignoreReadystate){
+  if(initialized)
+    return;
+  if(!( document.readyState == "complete" 
+     || document.readyState == "loaded" 
+     || document.readyState == "interactive"
+     || ignoreReadystate
+  )) return;
+  if(!("observe" in Object))
+    return;
+  initialized = true;
   if(window['templateRoot']){
     base = window['templateRoot'] + "/";
   }else if(document.querySelector("[data-template-root]")){
@@ -454,6 +471,13 @@ addEventListener("load",function(){
   compileTemplates(document);
   var t = compileTemplate(document.documentElement);
   t.instance(model);
-});
+};
+
+window['initMVSync'] = initMVSync;
 
 })();
+
+addEventListener("load",initMVSync.bind(null,true));
+addEventListener("DOMContentLoaded",initMVSync.bind(null,true));
+initMVSync(false);
+
