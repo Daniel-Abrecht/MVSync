@@ -127,6 +127,8 @@ function Template(template){
               }
               if(b.what=="attribute"){
                 setAttr(b.element,b.which,value);
+              }else if(b.what=="style"){
+                setStyle(b.element,b.which,value);
               }else if(b.what=="content"){
                 setContent(b.element,value);
               }
@@ -164,7 +166,11 @@ function Template(template){
       if(name in element)
         element[name] = value;
       else
-        element.setAttribute(name,value);
+        element.setAttribute(name,value===undefined?"":value);
+    }
+
+    function setStyle(element,name,value){
+      element.style[name] = value===undefined?"":value;
     }
 
     function setContent(element,value){
@@ -186,13 +192,17 @@ function Template(template){
           var b = bind[i].split(":");
           var expr = b[1];
           var name = expr.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)/)[1];
-          var attr = b[0];
+          var style = b[0].substr(0,1) == "@";
+          var attr = style?b[0].substr(1):b[0];
           var value = evaluateExpression(expr);
-          setAttr(e,attr,value);
+          if(style)
+            setStyle(e,attr,value);
+          else
+            setAttr(e,attr,value);
           mapping[name] = mapping[name] || [];
           mapping[name].push({
             which: attr,
-            what: "attribute",
+            what: style?"style":"attribute",
             type: "value",
             expr: expr,
             element: e
