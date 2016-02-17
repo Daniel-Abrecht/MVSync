@@ -10,6 +10,7 @@ Object.unobserve;
 
 var templates = {};
 var requiredTemplates = {};
+var eidc = 0;
 
 function init(){
   Object.observe(requiredTemplates,function(changes){
@@ -57,8 +58,7 @@ function Template(template){
     }
     function update(name,modelAction){
       if(name in mapping)
-        for(var i in mapping[name]){(function(){
-          var b = mapping[name][i];
+        mapping[name].forEach(function(b){
           var something = null;
           if(b.expr)
             something = evaluateExpression(b.expr);
@@ -66,13 +66,13 @@ function Template(template){
           switch(b.type){
             case "getter": {
               var cache
-                =  getterCache[name+b.expr]
-                =  getterCacheByProperty[b.which]
-                =  getterCache[name+b.expr]
-                || getterCacheByProperty[b.which]
+                =  getterCache[name+'\0'+b.expr]
+                =  getterCacheByProperty[b.which+'\0'+b.eid]
+                =  getterCache[name+'\0'+b.expr]
+                || getterCacheByProperty[b.which+'\0'+b.eid]
                 || {};
-              if(setterCacheByProperty[b.which]){
-                cache.relatedSetter = setterCacheByProperty[b.which];
+              if(setterCacheByProperty[b.which+'\0'+b.eid]){
+                cache.relatedSetter = setterCacheByProperty[b.which+'\0'+b.eid];
               }
               var update = function(value){
                 cache.lastValue = value;
@@ -94,14 +94,14 @@ function Template(template){
             } break;
             case "setter": {
               var scache
-                =  setterCache[name+b.expr]
-                =  setterCacheByProperty[b.which]
-                =  setterCache[name+b.expr]
-                || setterCacheByProperty[b.which]
+                =  setterCache[name+'\0'+b.expr]
+                =  setterCacheByProperty[b.which+'\0'+b.eid]
+                =  setterCache[name+'\0'+b.expr]
+                || setterCacheByProperty[b.which+'\0'+b.eid]
                 || {};
               var gcache
-                =  getterCacheByProperty[b.which]
-                || getterCacheByProperty[b.which]
+                =  getterCacheByProperty[b.which+'\0'+b.eid]
+                || getterCacheByProperty[b.which+'\0'+b.eid]
                 || {};
               gcache.relatedSetter = scache;
               scache.func = something;
@@ -110,15 +110,15 @@ function Template(template){
               var value = something;
               if(
                 !(name in getterCacheByProperty) ||
-                getterCacheByProperty[name].lastValue != value
+                getterCacheByProperty[name+'\0'+b.eid].lastValue != value
               ){ // value wasn't changed by a getter
                 var setter = null;
                 if(name in getterCacheByProperty){
-                  setter = getterCacheByProperty[name].relatedSetter.func;
-                  delete getterCacheByProperty[name].lastValue;
+                  setter = getterCacheByProperty[name+'\0'+b.eid].relatedSetter.func;
+                  delete getterCacheByProperty[name+'\0'+b.eid].lastValue;
                 }
                 if( !setter && (name in setterCacheByProperty) )
-                  setter = setterCacheByProperty[name].func;
+                  setter = setterCacheByProperty[name+'\0'+b.eid].func;
                 if(setter){
                   var callback = setter(value);
                   if(callback)
@@ -137,7 +137,7 @@ function Template(template){
               b.update();
             } break;
           }
-        })();}
+        });
     }
 
     this.root = (template instanceof HTMLHtmlElement)?template:template.cloneNode(true);
@@ -205,7 +205,8 @@ function Template(template){
             what: style?"style":"attribute",
             type: "value",
             expr: expr,
-            element: e
+            element: e,
+            eid: ( e.eid = ( e.eid || eidc++ ) )
           });
         }
       }
@@ -221,7 +222,8 @@ function Template(template){
           what: "content",
           type: "value",
           expr: expr,
-          element: e
+          element: e,
+          eid: ( e.eid = ( e.eid || eidc++ ) )
         });
       }
       var getter = e.getAttribute("data-getter");
@@ -237,7 +239,8 @@ function Template(template){
             which: attr,
             type: "getter",
             expr: expr,
-            element: e
+            element: e,
+            eid: ( e.eid = ( e.eid || eidc++ ) )
           });
         }
       }
@@ -254,7 +257,8 @@ function Template(template){
             which: attr,
             type: "setter",
             expr: expr,
-            element: e
+            element: e,
+            eid: ( e.eid = ( e.eid || eidc++ ) )
           });
         }
       }
@@ -262,12 +266,11 @@ function Template(template){
         var value = e[attr] || e.getAttribute(attr);
         for(var name in mapping){
           var maps = mapping[name];
-          for(var i in maps){
-            var map = maps[i];
-            if(map.type!="value"||map.which!=attr)
-              continue;
+          maps.forEach(function(map){
+            if( map.type != "value" || map.which != attr || map.element != e )
+              return;
             (new Function("s","v","if(s."+map.expr+".toString()!=v)s."+map.expr+"=Object(s."+map.expr+").constructor(v);")).call(scope,scope,value);
-          }
+          });
         }
       };
       if("MutationObserver" in window){
